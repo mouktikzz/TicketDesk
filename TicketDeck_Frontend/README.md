@@ -43,13 +43,13 @@ frontend/
 
 ### 1. Requirements
 - A modern web browser (Chrome, Firefox, Edge, Safari).
-- A running instance of the **TicketDeck Backend API** (by default expected at `http://localhost:8001`).
+- A running instance of the **TicketDeck Backend API** (by default expected at `http://localhost:8000`).
 
 ### 2. Configuration
 If your backend API is running on a different port or host, update the `BASE_URL` constant in [js/api.js](file:///c:/Users/hymat/OneDrive/Desktop/TicketDeck/frontend/js/api.js):
 
 ```javascript
-const BASE_URL = "http://localhost:8001";
+const BASE_URL = "http://localhost:8000";
 ```
 
 ### 3. Serving the App

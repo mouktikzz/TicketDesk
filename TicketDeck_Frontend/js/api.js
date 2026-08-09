@@ -1,5 +1,5 @@
 // ── API base URL ──────────────────────────────────────────────────────────────
-const BASE_URL = "http://0.0.0.0:8001";
+const BASE_URL = "http://0.0.0.0:8000";
 
 // Generic fetch wrapper with error handling
 async function apiFetch(path, options = {}) {
@@ -52,19 +52,54 @@ export const addComment = (ticketId, author, body) =>
   });
 
 // ── Attachments ───────────────────────────────────────────────────────────────
-export const uploadAttachment = (ticketId, file) => {
-  const fd = new FormData();
-  fd.append("file", file);
-  return fetch(`${BASE_URL}/api/tickets/${ticketId}/attachments`, {
-    method: "POST",
-    body: fd,
-  }).then((r) => {
-    if (!r.ok) return r.json().then((e) => Promise.reject(new Error(e.detail)));
-    return r.json();
+export const uploadAttachment = async (ticketId, file) => {
+  // 1. Ask FastAPI for a presigned S3 upload URL
+  const params = new URLSearchParams({
+    filename: file.name,
+    content_type: file.type || "application/octet-stream",
   });
+
+  const presigned = await apiFetch(
+    `/api/tickets/${ticketId}/attachments/presigned-url?${params.toString()}`
+  );
+
+  // 2. Upload the file directly to S3
+  const uploadResponse = await fetch(presigned.upload_url, {
+    method: "PUT",
+    headers: {
+      "Content-Type": file.type || "application/octet-stream",
+    },
+    body: file,
+  });
+
+  if (!uploadResponse.ok) {
+    throw new Error("Failed to upload file to S3");
+  }
+
+  // 3. Tell FastAPI that the S3 upload completed
+  return apiFetch(
+    `/api/tickets/${ticketId}/attachments/complete?${new URLSearchParams({
+      filename: file.name,
+      object_key: presigned.object_key,
+    }).toString()}`,
+    {
+      method: "POST",
+    }
+  );
 };
 
-export const getFileUrl = (storedName) => `${BASE_URL}/uploads/${storedName}`;
+// S3 objects are private, so we don't use the old /uploads/ URL anymore.
+export const getFileUrl = async (storedName) => {
+  const params = new URLSearchParams({
+    object_key: storedName,
+  });
+
+  const result = await apiFetch(
+    `/api/attachments/url?${params.toString()}`
+  );
+
+  return result.download_url;
+};
 
 // ── Toast notification ────────────────────────────────────────────────────────
 export function showToast(message, type = "success") {

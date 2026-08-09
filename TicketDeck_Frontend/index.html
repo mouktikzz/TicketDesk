@@ -495,7 +495,7 @@
     <div class="sidebar-foot">
       <div class="api-badge">
         <strong>TicketDesk v1.0</strong>
-        localhost:8001
+        localhost:8000
       </div>
     </div>
   </nav>
@@ -639,7 +639,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIG
 // ─────────────────────────────────────────────────────────────────────────────
-const API = 'http://localhost:8001';
+const API = 'http://localhost:8000';
 
 const STATUS_LABELS = { OPEN:'Open', IN_PROGRESS:'In Progress', RESOLVED:'Resolved', CLOSED:'Closed' };
 const STATUS_FLOW   = ['OPEN','IN_PROGRESS','RESOLVED','CLOSED'];
@@ -678,12 +678,60 @@ const getTicket      = (id)       => apiFetch(`/api/tickets/${id}`);
 const createTicket   = (b)        => apiFetch('/api/tickets',{method:'POST',body:JSON.stringify(b)});
 const updateStatus   = (id,s)     => apiFetch(`/api/tickets/${id}/status`,{method:'PATCH',body:JSON.stringify({status:s})});
 const addComment     = (id,a,b)   => apiFetch(`/api/tickets/${id}/comments`,{method:'POST',body:JSON.stringify({author:a,body:b})});
-const uploadAttachment = (id,file) => {
-  const fd = new FormData(); fd.append('file', file);
-  return fetch(`${API}/api/tickets/${id}/attachments`,{method:'POST',body:fd})
-    .then(r => r.ok ? r.json() : r.json().then(e => Promise.reject(new Error(e.detail))));
+const uploadAttachment = async (id, file) => {
+  // 1. Get presigned S3 URL
+  const params = new URLSearchParams({
+    filename: file.name,
+    content_type: file.type || "application/octet-stream"
+  });
+
+  const presigned = await apiFetch(
+    `/api/tickets/${id}/attachments/presigned-url?${params.toString()}`,
+    {
+      method: "POST"
+    }
+  );
+
+  // 2. Upload directly to S3
+  const uploadResponse = await fetch(
+    presigned.upload_url,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": file.type || "application/octet-stream"
+      },
+      body: file
+    }
+  );
+
+  if (!uploadResponse.ok) {
+    throw new Error(`S3 upload failed (${uploadResponse.status})`);
+  }
+
+  // 3. Register the S3 object in PostgreSQL
+  const completeParams = new URLSearchParams({
+    filename: file.name,
+    object_key: presigned.object_key
+  });
+
+  return await apiFetch(
+    `/api/tickets/${id}/attachments/complete?${completeParams.toString()}`,
+    {
+      method: "POST"
+    }
+  );
 };
-const fileUrl = (n) => `${API}/uploads/${n}`;
+const fileUrl = async (storedName) => {
+  const params = new URLSearchParams({
+    object_key: storedName
+  });
+
+  const response = await apiFetch(
+    `/api/attachments/url?${params.toString()}`
+  );
+
+  return response.download_url;
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // NAVIGATION
@@ -915,19 +963,57 @@ async function renderTickets() {
 
 async function loadTickets() {
   const grid = document.getElementById('tickets-grid');
-  grid.innerHTML = `<div class="loading"><div class="spin-lg"></div><p>Loading tickets…</p></div>`;
+
+  grid.innerHTML = `
+    <div class="loading">
+      <div class="spin-lg"></div>
+      <p>Loading tickets…</p>
+    </div>
+  `;
+
   try {
     const tickets = await getTickets(currentFilters);
+
     if (!tickets.length) {
-      grid.innerHTML = `<div class="empty-state"><div class="ei">📭</div><h3>No tickets found</h3><p>Try adjusting filters or create a new ticket.</p></div>`;
+      grid.innerHTML = `
+        <div class="empty-state">
+          <div class="ei">📭</div>
+          <h3>No tickets found</h3>
+          <p>Try adjusting filters or create a new ticket.</p>
+        </div>
+      `;
       return;
     }
-    grid.innerHTML = `<div class="tickets-grid">${tickets.map(ticketCard).join('')}</div>`;
+
+    grid.innerHTML = `
+      <div class="tickets-grid">
+        ${tickets.map(ticketCard).join('')}
+      </div>
+    `;
+
     grid.querySelectorAll('.tcard').forEach(c => {
-      c.addEventListener('click', () => goTo('detail', { id: c.dataset.id }));
-      c.addEventListener('keydown', e => { if(e.key==='Enter'||e.key===' ') goTo('detail',{id:c.dataset.id}); });
+      c.addEventListener('click', () =>
+        goTo('detail', { id: c.dataset.id })
+      );
+
+      c.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          goTo('detail', { id: c.dataset.id });
+        }
+      });
     });
-  } catch (_) {}
+
+  } catch (err) {
+    console.error('Failed to load tickets:', err);
+
+    grid.innerHTML = `
+      <div class="empty-state">
+        <div class="ei">⚠️</div>
+        <h3>Failed to load tickets</h3>
+        <p>${esc(err.message)}</p>
+      </div>
+    `;
+  }
 }
 
 function ticketCard(t) {
@@ -1003,16 +1089,45 @@ let currentTicketId = null;
 
 async function renderDetail(id) {
   currentTicketId = id;
+
   const el = document.getElementById('detail-content');
-  el.innerHTML = `<div class="loading"><div class="spin-lg"></div><p>Loading ticket…</p></div>`;
+
+  el.innerHTML = `
+    <div class="loading">
+      <div class="spin-lg"></div>
+      <p>Loading ticket…</p>
+    </div>
+  `;
+
   try {
     const t = await getTicket(id);
-    if (!t) { el.innerHTML = `<div class="empty-state"><p>Ticket not found.</p></div>`; return; }
+
+    if (!t) {
+      el.innerHTML = `
+        <div class="empty-state">
+          <p>Ticket not found.</p>
+        </div>
+      `;
+      return;
+    }
+
     el.innerHTML = buildDetailHTML(t);
     attachDetailEvents(t);
-  } catch (_) {}
-}
 
+    await loadAttachmentUrls();
+
+  } catch (err) {
+    console.error('Failed to load ticket:', err);
+
+    el.innerHTML = `
+      <div class="empty-state">
+        <div class="ei">⚠️</div>
+        <h3>Failed to load ticket</h3>
+        <p>${esc(err.message)}</p>
+      </div>
+    `;
+  }
+}
 function buildDetailHTML(t) {
   const pc    = PRI_COLORS[t.priority] || '#888';
   const next  = STATUS_NEXT[t.status];
@@ -1140,15 +1255,41 @@ function commentHTML(c) {
 }
 
 function attHTML(a) {
-  const url = fileUrl(a.stored_name);
-  const ext = a.filename.split('.').pop().toLowerCase();
-  const img = ['jpg','jpeg','png','gif','webp','bmp'].includes(ext);
-  const fn  = a.filename.length > 28 ? a.filename.slice(0,25)+'…' : a.filename;
+  const ext = a.filename.split(".").pop().toLowerCase();
+  const isImage = ["jpg", "jpeg", "png", "gif", "webp", "bmp"].includes(ext);
+
   return `
-  <div class="att-item">
-    <span>${img?'🖼️':'📄'}</span>
-    <a class="att-link" href="${url}" target="_blank" title="${esc(a.filename)}">${esc(fn)}</a>
-  </div>`;
+    <div class="att-item" data-object-key="${esc(a.stored_name)}">
+      <span class="att-icon">${isImage ? "🖼️" : "📄"}</span>
+      <a
+        href="#"
+        class="att-link attachment-download"
+        data-object-key="${esc(a.stored_name)}"
+      >
+        ${esc(a.filename)}
+      </a>
+    </div>
+  `;
+}
+
+async function loadAttachmentUrls() {
+  const links = document.querySelectorAll(".attachment-download");
+
+  for (const link of links) {
+    const objectKey = link.dataset.objectKey;
+
+    try {
+      const url = await fileUrl(objectKey);
+
+      link.href = url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+    } catch (error) {
+      console.error("Failed to generate attachment URL:", error);
+      link.textContent = "Unable to open attachment";
+      link.removeAttribute("href");
+    }
+  }
 }
 
 function attachDetailEvents(t) {

@@ -32,16 +32,30 @@ let currentTicketId = null;
 export async function renderTicketDetail(ticketId) {
   currentTicketId = ticketId;
   const view = document.getElementById("view-ticket-detail");
-  view.innerHTML = `<div class="loading-state"><div class="spinner-lg"></div><p>Loading ticket…</p></div>`;
+
+  view.innerHTML = `
+    <div class="loading-state">
+      <div class="spinner-lg"></div>
+      <p>Loading ticket…</p>
+    </div>
+  `;
 
   try {
     const ticket = await getTicket(ticketId);
+
     if (!ticket) {
-      view.innerHTML = `<div class="empty-state"><p>Ticket not found.</p></div>`;
+      view.innerHTML = `
+        <div class="empty-state">
+          <p>Ticket not found.</p>
+        </div>
+      `;
       return;
     }
+
     view.innerHTML = buildDetailHTML(ticket);
     attachDetailEvents(ticket);
+
+    await loadAttachmentUrls(ticket.attachments);
   } catch (_) {}
 }
 
@@ -183,17 +197,53 @@ function renderComment(c) {
 }
 
 function renderAttachment(a) {
-  const url = getFileUrl(a.stored_name);
   const ext = a.filename.split(".").pop().toLowerCase();
   const isImage = ["jpg", "jpeg", "png", "gif", "webp", "bmp"].includes(ext);
+
   return `
-    <div class="attachment-item">
+    <div class="attachment-item" data-stored-name="${escapeHtml(a.stored_name)}">
       <span class="attachment-icon">${isImage ? "🖼️" : "📄"}</span>
-      <a href="${url}" target="_blank" class="attachment-link" title="${escapeHtml(a.filename)}">
-        ${escapeHtml(a.filename.length > 28 ? a.filename.slice(0, 25) + "…" : a.filename)}
+      <a href="#" class="attachment-link attachment-link--pending"
+         title="${escapeHtml(a.filename)}">
+        ${escapeHtml(
+          a.filename.length > 28
+            ? a.filename.slice(0, 25) + "…"
+            : a.filename
+        )}
       </a>
     </div>
   `;
+}
+
+async function loadAttachmentUrls(attachments) {
+  for (const attachment of attachments) {
+    try {
+      const url = await getFileUrl(attachment.stored_name);
+
+      const item = document.querySelector(
+        `.attachment-item[data-stored-name="${CSS.escape(attachment.stored_name)}"]`
+      );
+
+      if (!item) continue;
+
+      const link = item.querySelector(".attachment-link");
+
+      link.href = url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.classList.remove("attachment-link--pending");
+    } catch (_) {
+      const item = document.querySelector(
+        `.attachment-item[data-stored-name="${CSS.escape(attachment.stored_name)}"]`
+      );
+
+      if (!item) continue;
+
+      const link = item.querySelector(".attachment-link");
+      link.textContent = "Unable to open file";
+      link.removeAttribute("href");
+    }
+  }
 }
 
 function attachDetailEvents(ticket) {
@@ -279,12 +329,28 @@ async function doUpload(file) {
 
   try {
     const att = await uploadAttachment(currentTicketId, file);
+
     const list = document.getElementById("attachments-list");
     const empty = list.querySelector(".empty-msg");
+
     if (empty) empty.remove();
+
     const div = document.createElement("div");
     div.innerHTML = renderAttachment(att);
+
     list.appendChild(div.firstElementChild);
+
+    const url = await getFileUrl(att.stored_name);
+
+    const link = div.querySelector(".attachment-link");
+
+    if (link) {
+      link.href = url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.classList.remove("attachment-link--pending");
+    }
+
     showToast(`${file.name} uploaded!`, "success");
   } catch (err) {
     showToast(err.message || "Upload failed", "error");

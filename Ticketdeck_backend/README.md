@@ -70,13 +70,13 @@ backend/
 Start the development server with **Uvicorn**:
 
 ```bash
-uvicorn main:app --reload --host 0.0.0.0 --port 8001
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 The API will be accessible at:
-- **Base URL**: `http://localhost:8001`
-- **Interactive OpenAPI (Swagger) Docs**: `http://localhost:8001/docs`
-- **ReDoc Documentation**: `http://localhost:8001/redoc`
+- **Base URL**: `http://localhost:8000`
+- **Interactive OpenAPI (Swagger) Docs**: `http://localhost:8000/docs`
+- **ReDoc Documentation**: `http://localhost:8000/redoc`
 
 ---
 

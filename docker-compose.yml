@@ -1,5 +1,4 @@
 services:
-
   db:
     image: postgres:16
     container_name: ticketdesk-db
@@ -21,7 +20,6 @@ services:
       timeout: 5s
       retries: 5
 
-
   backend:
     build:
       context: ./Ticketdeck_backend
@@ -34,6 +32,11 @@ services:
       DATABASE_NAME: ticketdesk
       DATABASE_USER: ticketdesk
       DATABASE_PASSWORD: ticketdesk_dev_password
+      AWS_REGION: ap-south-1
+      S3_BUCKET: ticketdesk-attachments-bucket
+
+    volumes:
+      - "${USERPROFILE}/.aws:/home/appuser/.aws:ro"
 
     ports:
       - "8000:8000"
@@ -41,7 +44,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-
 
 volumes:
   postgres_data:

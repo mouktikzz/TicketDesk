@@ -1,0 +1,105 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >
+  TicketDesk private PostgreSQL RDS database.
+
+Parameters:
+
+  DBUsername:
+    Type: String
+    Default: ticketdeskadmin
+
+  DBPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    Description: PostgreSQL master password
+
+  DBName:
+    Type: String
+    Default: ticketdesk
+
+Resources:
+
+  # --------------------------------------------------
+  # RDS Subnet Group
+  # --------------------------------------------------
+
+  TicketDeskDBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: TicketDesk private database subnets
+      SubnetIds:
+        - Fn::ImportValue: TicketDesk-PrivateSubnet1
+        - Fn::ImportValue: TicketDesk-PrivateSubnet2
+
+      Tags:
+        - Key: Name
+          Value: TicketDesk-DB-Subnet-Group
+
+  # --------------------------------------------------
+  # PostgreSQL RDS Instance
+  # --------------------------------------------------
+
+  TicketDeskDatabase:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+
+    Properties:
+      DBInstanceIdentifier: ticketdesk-postgres
+
+      Engine: postgres
+      EngineVersion: "16"
+
+      DBInstanceClass: db.t3.micro
+
+      AllocatedStorage: 20
+      StorageType: gp3
+      StorageEncrypted: true
+
+      DBName: !Ref DBName
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+
+      DBSubnetGroupName: !Ref TicketDeskDBSubnetGroup
+
+      VPCSecurityGroups:
+        - Fn::ImportValue: TicketDesk-RDSecurityGroup
+
+      PubliclyAccessible: false
+
+      BackupRetentionPeriod: 0
+      DeleteAutomatedBackups: true
+
+      MultiAZ: false
+
+      AutoMinorVersionUpgrade: true
+
+      Port: 5432
+
+      Tags:
+        - Key: Name
+          Value: TicketDesk-PostgreSQL
+
+Outputs:
+
+  DBInstanceIdentifier:
+    Description: RDS instance identifier
+    Value: !Ref TicketDeskDatabase
+
+  DBEndpoint:
+    Description: PostgreSQL endpoint
+    Value: !GetAtt TicketDeskDatabase.Endpoint.Address
+
+  DBPort:
+    Description: PostgreSQL port
+    Value: !GetAtt TicketDeskDatabase.Endpoint.Port
+
+  DBName:
+    Description: PostgreSQL database name
+    Value: !Ref DBName
+
+  DBUsername:
+    Description: PostgreSQL master username
+    Value: !Ref DBUsername

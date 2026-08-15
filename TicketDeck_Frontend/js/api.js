@@ -1,5 +1,5 @@
 // ── API base URL ──────────────────────────────────────────────────────────────
-const BASE_URL = "";
+const BASE_URL = "http://ticketdesk-alb-779410850.ap-south-1.elb.amazonaws.com";
 
 // Generic fetch wrapper with error handling
 async function apiFetch(path, options = {}) {

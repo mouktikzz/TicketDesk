@@ -43,3 +43,8 @@ crash.*.log
 *.tfplan
 plan.binary
 
+
+# Terraform state
+*.tfstate
+*.tfstate.*
+.terraform/

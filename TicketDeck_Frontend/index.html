@@ -639,7 +639,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIG
 // ─────────────────────────────────────────────────────────────────────────────
-const API = 'http://localhost:8000';
+const API = 'http://ticketdesk-alb-779410850.ap-south-1.elb.amazonaws.com';
 
 const STATUS_LABELS = { OPEN:'Open', IN_PROGRESS:'In Progress', RESOLVED:'Resolved', CLOSED:'Closed' };
 const STATUS_FLOW   = ['OPEN','IN_PROGRESS','RESOLVED','CLOSED'];
@@ -1393,3 +1393,4 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+

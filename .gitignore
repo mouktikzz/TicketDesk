@@ -33,3 +33,13 @@ Thumbs.db
 *.log
 # Local backup files
 *_backup.py
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfplan
+plan.binary
+

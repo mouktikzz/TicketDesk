@@ -31,5 +31,17 @@ Thumbs.db
 
 # Docker
 *.log
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+
 # Local backup files
 *_backup.py
+
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*infrastructure/terraform/.terraform/

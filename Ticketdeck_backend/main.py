@@ -5,11 +5,14 @@ from pathlib import Path
 from typing import Optional
 
 import boto3
+from dotenv import load_dotenv
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+
+load_dotenv()
 
 S3_BUCKET = os.getenv("S3_BUCKET")
 AWS_REGION = os.getenv("AWS_REGION", "ap-south-1")

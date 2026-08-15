@@ -1,5 +1,5 @@
 // ── API base URL ──────────────────────────────────────────────────────────────
-const BASE_URL = "http://0.0.0.0:8000";
+const BASE_URL = "";
 
 // Generic fetch wrapper with error handling
 async function apiFetch(path, options = {}) {

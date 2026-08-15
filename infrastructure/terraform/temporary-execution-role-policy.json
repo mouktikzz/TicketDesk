@@ -1,0 +1,11 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadTicketDeskDatabaseSecret",
+      "Effect": "Allow",
+      "Action": "secretsmanager:GetSecretValue",
+      "Resource": "arn:aws:secretsmanager:ap-south-1:956118719056:secret:ticketdesk/db-imzD0V"
+    }
+  ]
+}

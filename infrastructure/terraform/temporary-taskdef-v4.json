@@ -1,0 +1,89 @@
+{
+    "containerDefinitions":  [
+                                 {
+                                     "name":  "ticketdesk-api",
+                                     "image":  "956118719056.dkr.ecr.ap-south-1.amazonaws.com/ticketdesk-api:1bfa804",
+                                     "cpu":  0,
+                                     "portMappings":  [
+                                                          {
+                                                              "containerPort":  8000,
+                                                              "hostPort":  8000,
+                                                              "protocol":  "tcp",
+                                                              "name":  "ticketdesk-api-8000-tcp",
+                                                              "appProtocol":  "http"
+                                                          }
+                                                      ],
+                                     "essential":  true,
+                                     "environment":  [
+                                                         {
+                                                             "name":  "DATABASE_PORT",
+                                                             "value":  "5432"
+                                                         },
+                                                         {
+                                                             "name":  "DATABASE_NAME",
+                                                             "value":  "ticketdesk"
+                                                         },
+                                                         {
+                                                             "name":  "DATABASE_HOST",
+                                                             "value":  "ticketdesk-postgres.cn648882ywsv.ap-south-1.rds.amazonaws.com"
+                                                         },
+                                                         {
+                                                             "name":  "DATABASE_USER",
+                                                             "value":  "ticketdeskadmin"
+                                                         }
+                                                     ],
+                                     "environmentFiles":  [
+
+                                                          ],
+                                     "mountPoints":  [
+
+                                                     ],
+                                     "volumesFrom":  [
+
+                                                     ],
+                                     "secrets":  [
+                                                     {
+                                                         "name":  "DATABASE_PASSWORD",
+                                                         "valueFrom":  "arn:aws:secretsmanager:ap-south-1:956118719056:secret:ticketdesk/db-imzD0V"
+                                                     }
+                                                 ],
+                                     "ulimits":  [
+
+                                                 ],
+                                     "logConfiguration":  {
+                                                              "logDriver":  "awslogs",
+                                                              "options":  {
+                                                                              "awslogs-group":  "/ecs/ticketdesk-api",
+                                                                              "awslogs-create-group":  "true",
+                                                                              "awslogs-region":  "ap-south-1",
+                                                                              "awslogs-stream-prefix":  "ecs"
+                                                                          },
+                                                              "secretOptions":  [
+
+                                                                                ]
+                                                          },
+                                     "systemControls":  [
+
+                                                        ]
+                                 }
+                             ],
+    "family":  "ticketdesk-api",
+    "taskRoleArn":  "arn:aws:iam::956118719056:role/ticketdesk-api-task-role",
+    "executionRoleArn":  "arn:aws:iam::956118719056:role/ecsTaskExecutionRole",
+    "networkMode":  "awsvpc",
+    "volumes":  [
+
+                ],
+    "placementConstraints":  [
+
+                             ],
+    "runtimePlatform":  {
+                            "cpuArchitecture":  "X86_64",
+                            "operatingSystemFamily":  "LINUX"
+                        },
+    "requiresCompatibilities":  [
+                                    "FARGATE"
+                                ],
+    "cpu":  "512",
+    "memory":  "1024"
+}

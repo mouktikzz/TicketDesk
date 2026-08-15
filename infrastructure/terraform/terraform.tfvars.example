@@ -1,0 +1,2 @@
+# Copy this file to terraform.tfvars only if you need non-default values.
+aws_region = "ap-south-1"

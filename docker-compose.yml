@@ -23,9 +23,8 @@ services:
   backend:
     build:
       context: ./Ticketdeck_backend
-
     container_name: ticketdesk-api
-
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     environment:
       DATABASE_HOST: db
       DATABASE_PORT: 5432
@@ -34,13 +33,11 @@ services:
       DATABASE_PASSWORD: ticketdesk_dev_password
       AWS_REGION: ap-south-1
       S3_BUCKET: ticketdesk-attachments-bucket
-
     volumes:
+      - ./Ticketdeck_backend:/app
       - "${USERPROFILE}/.aws:/home/appuser/.aws:ro"
-
     ports:
       - "8000:8000"
-
     depends_on:
       db:
         condition: service_healthy

@@ -37,3 +37,22 @@ output "ecr_image" {
   description = "ECR image used by the TicketDesk API task"
   value       = var.ecr_image
 }
+
+output "sns_alert_topic_arn" {
+  description = "ARN of the TicketDesk SNS alert topic"
+  value       = aws_sns_topic.ticketdesk_alerts.arn
+}
+
+output "cloudwatch_dashboard_name" {
+  description = "Name of the TicketDesk CloudWatch dashboard"
+  value       = aws_cloudwatch_dashboard.ticketdesk.dashboard_name
+}
+
+output "cloudwatch_alarm_names" {
+  description = "TicketDesk CloudWatch alarm names"
+  value = [
+    aws_cloudwatch_metric_alarm.ticketdesk_alb_5xx_errors.alarm_name,
+    aws_cloudwatch_metric_alarm.ticketdesk_alb_unhealthy_target.alarm_name,
+    aws_cloudwatch_metric_alarm.ticketdesk_rds_cpu_high.alarm_name,
+  ]
+}

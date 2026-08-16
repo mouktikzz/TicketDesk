@@ -87,3 +87,8 @@ variable "task_role_name" {
   type        = string
   default     = "ticketdesk-api-task-role"
 }
+
+variable "notification_email" {
+  description = "Email address subscribed to the TicketDesk alert topic"
+  type        = string
+}

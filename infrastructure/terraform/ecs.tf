@@ -25,7 +25,7 @@ resource "aws_ecs_cluster" "ticketdesk" {
 
 resource "aws_cloudwatch_log_group" "ticketdesk" {
   name              = "/ecs/${var.project_name}-api"
-  retention_in_days = 0
+  retention_in_days = 30
 
   tags = {
     Name        = "${var.project_name}-api-logs"
@@ -34,7 +34,7 @@ resource "aws_cloudwatch_log_group" "ticketdesk" {
   }
 
   lifecycle {
-    ignore_changes = [tags, retention_in_days]
+    ignore_changes = [tags]
   }
 }
 
@@ -214,6 +214,28 @@ data "aws_lb_listener" "http" {
   port              = 80
 }
 
+# Reference the live database instance used by the application
+# It is not managed by Terraform in this repo and must not be duplicated.
+data "aws_db_instance" "ticketdesk" {
+  db_instance_identifier = "ticketdesk-postgres"
+}
+
+resource "aws_sns_topic" "ticketdesk_alerts" {
+  name = "ticketdesk-alerts"
+
+  tags = {
+    Name        = "ticketdesk-alerts"
+    Project     = var.project_name
+    Environment = var.environment
+  }
+}
+
+resource "aws_sns_topic_subscription" "ticketdesk_email" {
+  topic_arn = aws_sns_topic.ticketdesk_alerts.arn
+  protocol  = "email"
+  endpoint  = var.notification_email
+}
+
 resource "aws_ecs_task_definition" "api" {
   family                   = "${var.project_name}-api"
   requires_compatibilities = ["FARGATE"]
@@ -314,5 +336,242 @@ resource "aws_ecs_service" "api" {
     Project     = var.project_name
     Environment = var.environment
   }
+}
+
+resource "aws_cloudwatch_metric_alarm" "ticketdesk_alb_5xx_errors" {
+  alarm_name          = "ticketdesk-alb-5xx-errors"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 2
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 1
+  metric_name         = "HTTPCode_ELB_5XX_Count"
+  namespace           = "AWS/ApplicationELB"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.ticketdesk_alerts.arn]
+
+  dimensions = {
+    LoadBalancer = data.aws_lb.app.arn_suffix
+  }
+
+  tags = {
+    Name        = "ticketdesk-alb-5xx-errors"
+    Project     = var.project_name
+    Environment = var.environment
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "ticketdesk_alb_unhealthy_target" {
+  alarm_name          = "ticketdesk-alb-unhealthy-target"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 2
+  period              = 60
+  statistic           = "Maximum"
+  threshold           = 1
+  metric_name         = "UnHealthyHostCount"
+  namespace           = "AWS/ApplicationELB"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.ticketdesk_alerts.arn]
+
+  dimensions = {
+    LoadBalancer = data.aws_lb.app.arn_suffix
+    TargetGroup  = data.aws_lb_target_group.api.arn_suffix
+  }
+
+  tags = {
+    Name        = "ticketdesk-alb-unhealthy-target"
+    Project     = var.project_name
+    Environment = var.environment
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "ticketdesk_rds_cpu_high" {
+  alarm_name          = "ticketdesk-rds-cpu-high"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 2
+  period              = 300
+  statistic           = "Average"
+  threshold           = 80
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/RDS"
+  alarm_actions       = [aws_sns_topic.ticketdesk_alerts.arn]
+
+  dimensions = {
+    DBInstanceIdentifier = data.aws_db_instance.ticketdesk.db_instance_identifier
+  }
+
+  tags = {
+    Name        = "ticketdesk-rds-cpu-high"
+    Project     = var.project_name
+    Environment = var.environment
+  }
+}
+
+resource "aws_cloudwatch_dashboard" "ticketdesk" {
+  dashboard_name = "TicketDesk-Observability"
+  dashboard_body = jsonencode({
+    widgets = [
+      {
+        type   = "metric"
+        x      = 0
+        y      = 0
+        width  = 12
+        height = 6
+        properties = {
+          metrics = [
+            [
+              "AWS/ApplicationELB",
+              "RequestCount",
+              "LoadBalancer",
+              data.aws_lb.app.arn_suffix,
+              { stat = "Sum", period = 300, region = var.aws_region, visible = true, label = "RequestCount" }
+            ]
+          ]
+          view    = "timeSeries"
+          stacked = false
+          region  = var.aws_region
+          title   = "ALB RequestCount"
+          period  = 300
+        }
+      },
+      {
+        type   = "metric"
+        x      = 12
+        y      = 0
+        width  = 12
+        height = 6
+        properties = {
+          metrics = [
+            [
+              "AWS/ApplicationELB",
+              "HTTPCode_ELB_5XX_Count",
+              "LoadBalancer",
+              data.aws_lb.app.arn_suffix,
+              { stat = "Sum", period = 300, region = var.aws_region, id = "m1", label = "5xxCount" }
+            ],
+            [
+              "AWS/ApplicationELB",
+              "RequestCount",
+              "LoadBalancer",
+              data.aws_lb.app.arn_suffix,
+              { stat = "Sum", period = 300, region = var.aws_region, id = "m2", label = "RequestCount" }
+            ],
+            [
+              {
+                expression = "100 * m1 / MAX(m2, 1)",
+                id         = "e1",
+                label      = "5xx Rate (%)",
+                period     = 300,
+                region     = var.aws_region
+              }
+            ]
+          ]
+          view    = "timeSeries"
+          stacked = false
+          region  = var.aws_region
+          title   = "ALB 5xx Errors / Error Rate"
+          period  = 300
+        }
+      },
+      {
+        type   = "metric"
+        x      = 0
+        y      = 6
+        width  = 12
+        height = 6
+        properties = {
+          metrics = [
+            [
+              "AWS/ApplicationELB",
+              "TargetResponseTime",
+              "LoadBalancer",
+              data.aws_lb.app.arn_suffix,
+              "TargetGroup",
+              data.aws_lb_target_group.api.arn_suffix,
+              { stat = "Average", period = 300, region = var.aws_region, label = "TargetResponseTime" }
+            ]
+          ]
+          view    = "timeSeries"
+          stacked = false
+          region  = var.aws_region
+          title   = "ALB TargetResponseTime"
+          period  = 300
+        }
+      },
+      {
+        type   = "metric"
+        x      = 12
+        y      = 6
+        width  = 12
+        height = 6
+        properties = {
+          metrics = [
+            [
+              "AWS/ECS",
+              "CPUUtilization",
+              "ClusterName",
+              aws_ecs_cluster.ticketdesk.name,
+              "ServiceName",
+              aws_ecs_service.api.name,
+              { stat = "Average", period = 300, region = var.aws_region, label = "ECS CPU" }
+            ]
+          ]
+          view    = "timeSeries"
+          stacked = false
+          region  = var.aws_region
+          title   = "ECS CPUUtilization"
+          period  = 300
+        }
+      },
+      {
+        type   = "metric"
+        x      = 0
+        y      = 12
+        width  = 12
+        height = 6
+        properties = {
+          metrics = [
+            [
+              "AWS/ECS",
+              "MemoryUtilization",
+              "ClusterName",
+              aws_ecs_cluster.ticketdesk.name,
+              "ServiceName",
+              aws_ecs_service.api.name,
+              { stat = "Average", period = 300, region = var.aws_region, label = "ECS Memory" }
+            ]
+          ]
+          view    = "timeSeries"
+          stacked = false
+          region  = var.aws_region
+          title   = "ECS MemoryUtilization"
+          period  = 300
+        }
+      },
+      {
+        type   = "metric"
+        x      = 12
+        y      = 12
+        width  = 12
+        height = 6
+        properties = {
+          metrics = [
+            [
+              "AWS/RDS",
+              "DatabaseConnections",
+              "DBInstanceIdentifier",
+              data.aws_db_instance.ticketdesk.db_instance_identifier,
+              { stat = "Average", period = 300, region = var.aws_region, label = "DB Connections" }
+            ]
+          ]
+          view    = "timeSeries"
+          stacked = false
+          region  = var.aws_region
+          title   = "RDS DatabaseConnections"
+          period  = 300
+        }
+      }
+    ]
+  })
 }
 

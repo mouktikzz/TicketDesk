@@ -47,37 +47,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Diagnose GitHub OIDC claims
-        run: |
-          set -e
-
-          if [ -z "$ACTIONS_ID_TOKEN_REQUEST_URL" ]; then
-            echo "ERROR: ACTIONS_ID_TOKEN_REQUEST_URL is not set"
-            exit 1
-          fi
-
-          if [ -z "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" ]; then
-            echo "ERROR: ACTIONS_ID_TOKEN_REQUEST_TOKEN is not set"
-            exit 1
-          fi
-
-          echo "OIDC request URL is available"
-          echo "OIDC request token is available"
-
-          RESPONSE=$(curl -fsS \
-            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL")
-
-          echo "$RESPONSE" | jq -e '.value' >/dev/null
-
-          ID_TOKEN=$(echo "$RESPONSE" | jq -r '.value')
-
-          PAYLOAD=$(echo "$ID_TOKEN" | cut -d '.' -f2 | base64 -d 2>/dev/null)
-
-          echo "OIDC issuer: $(echo "$PAYLOAD" | jq -r '.iss')"
-          echo "OIDC audience: $(echo "$PAYLOAD" | jq -r '.aud')"
-          echo "OIDC subject: $(echo "$PAYLOAD" | jq -r '.sub')"
-
       - name: Configure AWS credentials for GitHub OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:

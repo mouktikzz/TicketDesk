@@ -19,9 +19,9 @@ def get_connection():
         database=DATABASE_NAME,
         user=DATABASE_USER,
         password=DATABASE_PASSWORD,
+        sslmode="require",
         cursor_factory=RealDictCursor,
     )
-
 
 def init_db() -> None:
     UPLOADS_DIR.mkdir(exist_ok=True)

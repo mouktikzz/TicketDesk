@@ -65,3 +65,12 @@ tfplan
 infrastructure/terraform-bootstrap/.terraform/
 infrastructure/terraform-bootstrap/*.tfstate
 infrastructure/terraform-bootstrap/*.tfstate.*
+# Local deployment/debug artifacts
+taskdef.json
+taskdef-register.json
+cost-data.json
+plan.txt
+
+plan.txt
+
+plan.txt

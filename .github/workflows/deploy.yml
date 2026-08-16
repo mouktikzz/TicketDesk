@@ -1,0 +1,104 @@
+name: TicketDesk CI/CD
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: Build, test, scan, and deploy backend
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ap-south-1
+      AWS_ACCOUNT_ID: "956118719056"
+      ECR_REPOSITORY: ticketdesk-api
+      ECS_CLUSTER: ticketdesk-cluster
+      ECS_SERVICE: ticketdesk-cluster
+      ECS_TASK_DEFINITION_FAMILY: ticketdesk-api
+      ECR_IMAGE_URI: 956118719056.dkr.ecr.ap-south-1.amazonaws.com/ticketdesk-api
+      HEALTH_ENDPOINT: http://ticketdesk-alb-779410850.ap-south-1.elb.amazonaws.com/api/health
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install backend test dependencies
+        working-directory: Ticketdeck_backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run pytest
+        working-directory: Ticketdeck_backend
+        run: pytest -q
+
+      - name: Run Gitleaks secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: detect --source . --no-banner --redact --exit-code 1
+
+      - name: Configure AWS credentials for GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::956118719056:role/TicketDeskGitHubActionsRole
+          aws-region: ap-south-1
+
+      - name: Login to Amazon ECR
+        run: |
+          aws ecr get-login-password --region "$AWS_REGION" | \
+          docker login --username AWS --password-stdin "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+
+      - name: Build backend Docker image
+        run: |
+          docker build -t "$ECR_REPOSITORY:${{ github.sha }}" \
+            -f Ticketdeck_backend/Dockerfile \
+            Ticketdeck_backend
+
+      - name: Tag Docker image for ECR
+        run: |
+          docker tag "$ECR_REPOSITORY:${{ github.sha }}" \
+            "$ECR_IMAGE_URI:${{ github.sha }}"
+
+      - name: Push Docker image to ECR
+        run: |
+          docker push "$ECR_IMAGE_URI:${{ github.sha }}"
+
+      - name: Obtain current ECS task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition "$ECS_TASK_DEFINITION_FAMILY" \
+            --query taskDefinition > task-definition.json
+          jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)' task-definition.json > task-definition-render.json
+
+      - name: Render updated ECS task definition
+        id: render-task-definition
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition-render.json
+          container-name: ticketdesk-api
+          image: 956118719056.dkr.ecr.ap-south-1.amazonaws.com/ticketdesk-api:${{ github.sha }}
+
+      - name: Deploy to ECS service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-task-definition.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      - name: Smoke test production health endpoint
+        run: |
+          curl -fsS "$HEALTH_ENDPOINT" | tee /tmp/health.json
+          jq -e '.status == "ok"' /tmp/health.json >/dev/null

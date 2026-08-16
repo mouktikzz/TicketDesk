@@ -103,6 +103,138 @@ data "aws_secretsmanager_secret_version" "db" {
   secret_id = data.aws_secretsmanager_secret.db.id
 }
 
+# ============================================================
+# SSM Parameter Store - runtime application configuration
+# ============================================================
+
+resource "aws_ssm_parameter" "s3_bucket" {
+  name  = "/${var.project_name}/${var.environment}/S3_BUCKET"
+  type  = "String"
+  value = "ticketdesk-attachments-bucket"
+
+  tags = {
+    Name        = "${var.project_name}-S3_BUCKET"
+    Project     = var.project_name
+    Owner       = "Mouktik"
+    Environment = var.environment
+    CostCenter  = "TicketDesk"
+  }
+}
+
+resource "aws_ssm_parameter" "aws_region" {
+  name  = "/${var.project_name}/${var.environment}/AWS_REGION"
+  type  = "String"
+  value = var.aws_region
+
+  tags = {
+    Name        = "${var.project_name}-AWS_REGION"
+    Project     = var.project_name
+    Owner       = "Mouktik"
+    Environment = var.environment
+    CostCenter  = "TicketDesk"
+  }
+}
+
+resource "aws_ssm_parameter" "database_name" {
+  name  = "/${var.project_name}/${var.environment}/DATABASE_NAME"
+  type  = "String"
+  value = "ticketdesk"
+
+  tags = {
+    Name        = "${var.project_name}-DATABASE_NAME"
+    Project     = var.project_name
+    Owner       = "Mouktik"
+    Environment = var.environment
+    CostCenter  = "TicketDesk"
+  }
+}
+
+resource "aws_ssm_parameter" "database_host" {
+  name  = "/${var.project_name}/${var.environment}/DATABASE_HOST"
+  type  = "String"
+  value = data.aws_db_instance.ticketdesk.address
+
+  tags = {
+    Name        = "${var.project_name}-DATABASE_HOST"
+    Project     = var.project_name
+    Owner       = "Mouktik"
+    Environment = var.environment
+    CostCenter  = "TicketDesk"
+  }
+}
+
+resource "aws_ssm_parameter" "database_port" {
+  name  = "/${var.project_name}/${var.environment}/DATABASE_PORT"
+  type  = "String"
+  value = "5432"
+
+  tags = {
+    Name        = "${var.project_name}-DATABASE_PORT"
+    Project     = var.project_name
+    Owner       = "Mouktik"
+    Environment = var.environment
+    CostCenter  = "TicketDesk"
+  }
+}
+
+resource "aws_ssm_parameter" "database_user" {
+  name  = "/${var.project_name}/${var.environment}/DATABASE_USER"
+  type  = "String"
+  value = "ticketdeskadmin"
+
+  tags = {
+    Name        = "${var.project_name}-DATABASE_USER"
+    Project     = var.project_name
+    Owner       = "Mouktik"
+    Environment = var.environment
+    CostCenter  = "TicketDesk"
+  }
+}
+
+resource "aws_ssm_parameter" "port" {
+  name  = "/${var.project_name}/${var.environment}/PORT"
+  type  = "String"
+  value = tostring(var.container_port)
+
+  tags = {
+    Name        = "${var.project_name}-PORT"
+    Project     = var.project_name
+    Owner       = "Mouktik"
+    Environment = var.environment
+    CostCenter  = "TicketDesk"
+  }
+}
+
+resource "aws_iam_role_policy" "read_ssm_parameters" {
+  name = "TicketDeskReadSSMParameters"
+  role = aws_iam_role.ecs_task_execution.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+
+    Statement = [
+      {
+        Effect = "Allow"
+
+        Action = [
+          "ssm:GetParameter",
+          "ssm:GetParameters"
+        ]
+
+        Resource = [
+          aws_ssm_parameter.s3_bucket.arn,
+          aws_ssm_parameter.aws_region.arn,
+          aws_ssm_parameter.database_name.arn,
+          aws_ssm_parameter.database_host.arn,
+          aws_ssm_parameter.database_port.arn,
+          aws_ssm_parameter.database_user.arn,
+          aws_ssm_parameter.port.arn
+        ]
+      }
+    ]
+  })
+}
+
 resource "aws_iam_policy" "task_runtime_config" {
   name = "${var.project_name}-task-runtime-config"
 
@@ -265,16 +397,36 @@ resource "aws_ecs_task_definition" "api" {
           "awslogs-stream-prefix" = "ecs"
         }
       }
-      environment = [
-        { name = "PORT", value = tostring(var.container_port) },
-        { name = "AWS_REGION", value = var.aws_region },
-        { name = "DATABASE_HOST", value = "ticketdesk-postgres.cn648882ywsv.ap-south-1.rds.amazonaws.com" },
-        { name = "DATABASE_PORT", value = "5432" },
-        { name = "DATABASE_NAME", value = "ticketdesk" },
-        { name = "DATABASE_USER", value = "ticketdeskadmin" },
-        { name = "S3_BUCKET", value = "ticketdesk-attachments-bucket" }
-      ]
+      environment = []
       secrets = [
+        {
+          name      = "PORT"
+          valueFrom = aws_ssm_parameter.port.arn
+        },
+        {
+          name      = "AWS_REGION"
+          valueFrom = aws_ssm_parameter.aws_region.arn
+        },
+        {
+          name      = "DATABASE_HOST"
+          valueFrom = aws_ssm_parameter.database_host.arn
+        },
+        {
+          name      = "DATABASE_PORT"
+          valueFrom = aws_ssm_parameter.database_port.arn
+        },
+        {
+          name      = "DATABASE_NAME"
+          valueFrom = aws_ssm_parameter.database_name.arn
+        },
+        {
+          name      = "DATABASE_USER"
+          valueFrom = aws_ssm_parameter.database_user.arn
+        },
+        {
+          name      = "S3_BUCKET"
+          valueFrom = aws_ssm_parameter.s3_bucket.arn
+        },
         {
           name      = "DATABASE_PASSWORD"
           valueFrom = "${data.aws_secretsmanager_secret.db.arn}:password::"
@@ -289,7 +441,7 @@ resource "aws_ecs_task_definition" "api" {
   }
 
   lifecycle {
-    ignore_changes = [container_definitions, tags]
+    ignore_changes = [tags]
   }
 
   tags = {

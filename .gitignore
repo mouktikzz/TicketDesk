@@ -48,3 +48,20 @@ plan.binary
 *.tfstate
 *.tfstate.*
 .terraform/
+
+
+# Terraform generated files
+*.tfplan
+plan.txt
+
+# AWS diagnostic / generated reports
+cost-report.json
+resource-tags.json
+
+# Terraform local artifacts
+tfplan
+
+# Local Terraform bootstrap state
+infrastructure/terraform-bootstrap/.terraform/
+infrastructure/terraform-bootstrap/*.tfstate
+infrastructure/terraform-bootstrap/*.tfstate.*

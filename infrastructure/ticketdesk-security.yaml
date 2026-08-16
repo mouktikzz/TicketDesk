@@ -20,6 +20,14 @@ Resources:
       Tags:
         - Key: Name
           Value: TicketDesk-Backend-SG
+        - Key: Project
+          Value: ticketdesk
+        - Key: Owner
+          Value: Mouktik
+        - Key: Environment
+          Value: dev
+        - Key: CostCenter
+          Value: TicketDesk
 
   # --------------------------------------------------
   # RDS PostgreSQL Security Group
@@ -35,6 +43,14 @@ Resources:
       Tags:
         - Key: Name
           Value: TicketDesk-RDS-SG
+        - Key: Project
+          Value: ticketdesk
+        - Key: Owner
+          Value: Mouktik
+        - Key: Environment
+          Value: dev
+        - Key: CostCenter
+          Value: TicketDesk
 
   # --------------------------------------------------
   # Backend HTTP Access

@@ -8,20 +8,24 @@ terraform {
     }
   }
 
-  # Use a remote S3 backend in production once the state bucket and DynamoDB lock table exist.
-  # backend "s3" {
-  #   bucket         = "ticketdesk-terraform-state"
-  #   key            = "ticketdesk/ecs/terraform.tfstate"
-  #   region         = "ap-south-1"
-  #   dynamodb_table = "ticketdesk-terraform-locks"
-  #   encrypt        = true
-  # }
-
-  backend "local" {
-    path = "terraform.tfstate"
+  backend "s3" {
+    bucket         = "ticketdesk-terraform-state"
+    key            = "ticketdesk/terraform.tfstate"
+    region         = "ap-south-1"
+    dynamodb_table = "ticketdesk-terraform-locks"
+    encrypt        = true
   }
 }
 
 provider "aws" {
   region = var.aws_region
+
+  default_tags {
+    tags = {
+      Project     = "ticketdesk"
+      Owner       = "Mouktik"
+      Environment = "dev"
+      CostCenter  = "TicketDesk"
+    }
+  }
 }

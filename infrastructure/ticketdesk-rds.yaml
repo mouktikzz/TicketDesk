@@ -69,7 +69,7 @@ Resources:
 
       PubliclyAccessible: false
 
-      BackupRetentionPeriod: 0
+      BackupRetentionPeriod: 1
       DeleteAutomatedBackups: true
 
       MultiAZ: false
@@ -81,6 +81,14 @@ Resources:
       Tags:
         - Key: Name
           Value: TicketDesk-PostgreSQL
+        - Key: Project
+          Value: ticketdesk
+        - Key: Owner
+          Value: Mouktik
+        - Key: Environment
+          Value: dev
+        - Key: CostCenter
+          Value: TicketDesk
 
 Outputs:
 

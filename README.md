@@ -2,7 +2,9 @@
 
 TicketDesk is a cloud-deployed ticket management application with a FastAPI backend and web frontend.
 
-The application is containerized with Docker and deployed on AWS using Terraform, Amazon ECS, Application Load Balancer, Amazon RDS PostgreSQL, Amazon S3, AWS Secrets Manager, AWS Systems Manager Parameter Store, CloudWatch, SNS, and ECR.
+The application is containerized with Docker and deployed on AWS using Terraform, Amazon ECS Fargate, Application Load Balancer, Amazon RDS PostgreSQL, Amazon S3, AWS Secrets Manager, AWS Systems Manager Parameter Store, CloudWatch, SNS, and ECR.
+
+The frontend is currently served separately and communicates with the backend through the AWS Application Load Balancer.
 
 ---
 
@@ -12,32 +14,41 @@ The application is containerized with Docker and deployed on AWS using Terraform
                          Internet
                             |
                             v
-                    +---------------+
-                    |      ALB      |
-                    | Public Subnet |
-                    +-------+-------+
-                            |
-                            v
-                    +---------------+
-                    |      ECS      |
-                    | FastAPI API   |
-                    | Private Subnet|
-                    +-------+-------+
-                            |
-                 +----------+----------+
-                 |                     |
-                 v                     v
-          +-------------+       +-------------+
-          | PostgreSQL  |       |     S3      |
-          |    RDS      |       | Attachments |
-          |   Private   |       |   Private   |
-          +-------------+       +-------------+
+                    +----------------+
+                    |      ALB       |
+                    | Public Subnets |
+                    +--------+-------+
+                             |
+                             v
+                    +----------------+
+                    | ECS Fargate    |
+                    | FastAPI API    |
+                    | Private Subnet |
+                    +--------+-------+
+                             |
+                  +----------+----------+
+                  |                     |
+                  v                     v
+          +---------------+     +---------------+
+          | PostgreSQL RDS|     |      S3       |
+          |    Private    |     |  Attachments  |
+          +---------------+     |    Private    |
+                                +---------------+
 
 Configuration:
-    Secrets Manager -> Database password
-    SSM Parameter Store -> Runtime application configuration
+
+    Secrets Manager
+          |
+          v
+    Database password
+
+    SSM Parameter Store
+          |
+          v
+    Runtime application configuration
 
 Observability:
+
     ECS / ALB / RDS
           |
           v
@@ -49,16 +60,74 @@ Observability:
 
 ---
 
+## Frontend
+
+The TicketDesk frontend is a static HTML/CSS/Vanilla JavaScript application located in:
+
+```text
+TicketDeck_Frontend/
+```
+
+It provides:
+
+* Dashboard metrics
+* Ticket creation and listing
+* Search and filtering
+* Ticket details
+* Status updates
+* Comments
+* File attachments
+* Direct S3 uploads using presigned URLs
+* Presigned attachment downloads
+
+### Current Frontend / Backend Flow
+
+The frontend is currently served locally during development while the backend is deployed behind the AWS ALB.
+
+```text
+Browser
+   |
+   v
+Frontend
+localhost:8080
+   |
+   | API requests
+   v
+AWS Application Load Balancer
+   |
+   v
+ECS Fargate
+   |
+   v
+FastAPI Backend
+   |
+   +------------------+
+   |                  |
+   v                  v
+RDS PostgreSQL       S3
+                    Attachments
+```
+
+The current frontend API configuration is:
+
+```javascript
+const BASE_URL = "http://ticketdesk-alb-779410850.ap-south-1.elb.amazonaws.com";
+```
+
+The frontend README contains the complete frontend setup, configuration, attachment flow, and troubleshooting documentation.
+
+---
+
 ## Prerequisites
 
 Install/configure:
 
-- Git
-- Python 3.11+
-- Docker
-- Terraform >= 1.5
-- AWS CLI
-- An AWS account with permissions to create the required resources
+* Git
+* Python 3.11+
+* Docker
+* Terraform >= 1.5
+* AWS CLI
+* An AWS account with permissions to create the required resources
 
 Configure AWS credentials:
 
@@ -97,6 +166,18 @@ TicketDesk/
 │   ├── requirements.txt
 │   ├── Dockerfile
 │   └── ...
+│
+├── TicketDeck_Frontend/
+│   ├── index.html
+│   ├── README.md
+│   ├── css/
+│   │   └── styles.css
+│   └── js/
+│       ├── api.js
+│       ├── app.js
+│       ├── dashboard.js
+│       ├── tickets.js
+│       └── ticket-detail.js
 │
 ├── infrastructure/
 │   ├── ticketdesk-network.yaml
@@ -292,25 +373,25 @@ Do not delete or manually edit the Terraform state.
 
 The deployment includes:
 
-- Amazon VPC
-- Public and private subnets
-- Internet Gateway
-- Route tables
-- Security groups
-- Application Load Balancer
-- Amazon ECS cluster
-- ECS service
-- ECS task definition
-- Amazon ECR
-- Amazon RDS PostgreSQL
-- Amazon S3
-- AWS Secrets Manager
-- AWS Systems Manager Parameter Store
-- CloudWatch Logs
-- CloudWatch Dashboard
-- CloudWatch Alarms
-- Amazon SNS
-- Terraform remote state
+* Amazon VPC
+* Public and private subnets
+* Internet Gateway
+* Route tables
+* Security groups
+* Application Load Balancer
+* Amazon ECS cluster
+* ECS service
+* ECS task definition
+* Amazon ECR
+* Amazon RDS PostgreSQL
+* Amazon S3
+* AWS Secrets Manager
+* AWS Systems Manager Parameter Store
+* CloudWatch Logs
+* CloudWatch Dashboard
+* CloudWatch Alarms
+* Amazon SNS
+* Terraform remote state
 
 ---
 
@@ -318,11 +399,11 @@ The deployment includes:
 
 The application follows a public/private subnet architecture.
 
-### Public subnet
+### Public Subnet
 
 The Application Load Balancer is deployed in public subnets.
 
-### Private subnet
+### Private Subnet
 
 The ECS application tasks run in private subnets.
 
@@ -365,9 +446,9 @@ Port:
 
 The database is:
 
-- Private
-- Not publicly accessible
-- Encrypted at rest
+* Private
+* Not publicly accessible
+* Encrypted at rest
 
 Database credentials are not stored in the application repository.
 
@@ -387,12 +468,12 @@ from Secrets Manager at runtime.
 
 Do not place database passwords in:
 
-- Git
-- `.tf` files
-- Dockerfiles
-- source code
-- README files
-- environment files committed to Git
+* Git
+* `.tf` files
+* Dockerfiles
+* source code
+* README files
+* environment files committed to Git
 
 ---
 
@@ -470,10 +551,10 @@ PASS - No errors detected
 
 CloudWatch contains:
 
-- ECS logs
-- ALB metrics
-- RDS metrics
-- Application dashboard
+* ECS logs
+* ALB metrics
+* RDS metrics
+* Application dashboard
 
 Dashboard:
 
@@ -512,7 +593,7 @@ Desired: 1
 Running: 1
 ```
 
-### 2. Target health
+### 2. Target Health
 
 ```powershell
 aws elbv2 describe-target-health `
@@ -563,26 +644,70 @@ RDS available
 
 ## Frontend / CloudFront
 
-The frontend S3 bucket is private and has public access blocked.
+The frontend files are managed through Terraform and stored in a private S3 bucket with public access blocked.
 
-CloudFront is configured in Terraform with Origin Access Control.
-
-Current limitation:
+The planned production architecture uses CloudFront as the public entry point:
 
 ```text
-AWS account verification is required before new CloudFront
-distributions can be created.
+                         Internet
+                            |
+                            v
+                    +-----------------+
+                    |   CloudFront    |
+                    |   Distribution  |
+                    +--------+--------+
+                             |
+                  +----------+----------+
+                  |                     |
+               Default                /api/*
+                  |                     |
+                  v                     v
+          Private S3 Bucket            ALB
+          Frontend Files                |
+                                        v
+                                  ECS Fargate
+                                        |
+                              +---------+---------+
+                              |                   |
+                              v                   v
+                         PostgreSQL RDS      S3 Attachments
 ```
 
-Therefore CloudFront distribution creation remains blocked by the AWS account-level restriction.
+In the final CloudFront setup, the frontend should use:
 
-The CloudFront configuration itself is maintained in Terraform and can be created after AWS account verification is completed.
+```javascript
+const BASE_URL = "/api";
+```
+
+CloudFront will route `/api/*` requests to the existing ALB.
+
+This makes CloudFront the single public entry point and avoids exposing the ALB hostname directly in browser JavaScript.
+
+### Current CloudFront Limitation
+
+CloudFront distribution creation is currently blocked by an AWS account-level verification requirement:
+
+```text
+Your account must be verified before you can add new CloudFront resources.
+```
+
+Therefore:
+
+```text
+Frontend S3 deployment       -> available
+CloudFront Terraform config -> prepared
+CloudFront distribution      -> blocked by AWS verification
+```
+
+The CloudFront Terraform configuration is retained and can be enabled after AWS account verification is completed.
+
+Do not repeatedly run `terraform apply` expecting this AWS account restriction to disappear.
 
 ---
 
 ## Important AWS Commands
 
-Check ECS:
+### Check ECS
 
 ```powershell
 aws ecs list-services `
@@ -590,7 +715,7 @@ aws ecs list-services `
   --region ap-south-1
 ```
 
-Check RDS:
+### Check RDS
 
 ```powershell
 aws rds describe-db-instances `
@@ -598,7 +723,7 @@ aws rds describe-db-instances `
   --region ap-south-1
 ```
 
-Check ECR:
+### Check ECR
 
 ```powershell
 aws ecr describe-repositories `
@@ -606,7 +731,7 @@ aws ecr describe-repositories `
   --region ap-south-1
 ```
 
-Check SSM:
+### Check SSM
 
 ```powershell
 aws ssm get-parameters-by-path `
@@ -614,7 +739,7 @@ aws ssm get-parameters-by-path `
   --region ap-south-1
 ```
 
-Check Terraform state:
+### Check Terraform State
 
 ```powershell
 terraform state list
@@ -624,7 +749,7 @@ terraform state list
 
 ## Troubleshooting
 
-### ECS task is not running
+### ECS Task Is Not Running
 
 Check:
 
@@ -637,7 +762,7 @@ aws ecs describe-services `
 
 Then inspect ECS events and CloudWatch logs.
 
-### ALB target is unhealthy
+### ALB Target Is Unhealthy
 
 Check:
 
@@ -647,12 +772,12 @@ Check:
 
 Verify:
 
-- ECS container is listening on port 8000
-- Target group port is correct
-- ECS security group allows traffic from the ALB security group
-- Health check path is `/api/health`
+* ECS container is listening on port 8000
+* Target group port is correct
+* ECS security group allows traffic from the ALB security group
+* Health check path is `/api/health`
 
-### Terraform shows unexpected region
+### Terraform Shows Unexpected Region
 
 Check:
 
@@ -672,7 +797,7 @@ Set it:
 aws configure set region ap-south-1
 ```
 
-### CloudFront creation fails
+### CloudFront Creation Fails
 
 If AWS returns:
 
@@ -706,35 +831,36 @@ Terraform state contains infrastructure information and should remain in the rem
 
 ## Deployment Checklist
 
-- [x] Multi-stage Dockerfile
-- [x] Container runs as non-root
-- [x] Build tools excluded from production image
-- [x] Git SHA image tagging
-- [x] ECR image scanning
-- [x] Terraform-managed infrastructure
-- [x] Remote Terraform state
-- [x] DynamoDB state locking
-- [x] Private ECS subnet
-- [x] Public ALB
-- [x] Security-group based access
-- [x] Health check
-- [x] Two Availability Zones
-- [x] ALB application access
-- [x] Private encrypted RDS
-- [x] Secrets Manager database password
-- [x] SSM runtime configuration
-- [x] No credentials in repository
-- [x] Encryption at rest
-- [x] CloudWatch logging
-- [x] CloudWatch dashboard
-- [x] CloudWatch alarms
-- [x] SNS notifications
-- [x] Resource tagging
-- [x] IAM least privilege
-- [x] Cost report
-- [x] Terraform destroy/apply rebuild tested
-- [x] Load test passed
-- [ ] CloudFront distribution — blocked by AWS account verification
+* [x] Multi-stage Dockerfile
+* [x] Container runs as non-root
+* [x] Build tools excluded from production image
+* [x] Git SHA image tagging
+* [x] ECR image scanning
+* [x] Terraform-managed infrastructure
+* [x] Remote Terraform state
+* [x] DynamoDB state locking
+* [x] Private ECS subnet
+* [x] Public ALB
+* [x] Security-group based access
+* [x] Health check
+* [x] Two Availability Zones
+* [x] ALB application access
+* [x] Private encrypted RDS
+* [x] Secrets Manager database password
+* [x] SSM runtime configuration
+* [x] No credentials in repository
+* [x] Encryption at rest
+* [x] Frontend files managed through Terraform and stored in private S3
+* [x] CloudWatch logging
+* [x] CloudWatch dashboard
+* [x] CloudWatch alarms
+* [x] SNS notifications
+* [x] Resource tagging
+* [x] IAM least privilege
+* [x] Cost report
+* [x] Terraform destroy/apply rebuild tested
+* [x] Load test passed
+* [ ] CloudFront distribution — blocked by AWS account verification
 
 ---
 

@@ -1,16 +1,22 @@
 output "vpc_id" {
-  description = "The VPC ID for the TicketDesk environment"
-  value       = data.aws_vpc.ticketdesk.id
+  description = "TicketDesk VPC ID"
+  value       = aws_vpc.ticketdesk.id
 }
 
 output "public_subnet_ids" {
-  description = "Public subnet IDs used by the ALB"
-  value       = [data.aws_subnet.public_az1.id, data.aws_subnet.public_az2.id]
+  description = "Public subnet IDs"
+  value = [
+    aws_subnet.public_az1.id,
+    aws_subnet.public_az2.id
+  ]
 }
 
 output "private_subnet_ids" {
-  description = "Private subnet IDs used by the ECS tasks (mapped to the live ALB subnets)"
-  value       = [data.aws_subnet.public_az1.id, data.aws_subnet.public_az2.id]
+  description = "Private subnet IDs"
+  value = [
+    aws_subnet.private_az1.id,
+    aws_subnet.private_az2.id
+  ]
 }
 
 output "alb_dns_name" {

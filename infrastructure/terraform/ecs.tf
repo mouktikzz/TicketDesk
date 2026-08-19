@@ -461,8 +461,15 @@ resource "aws_ecs_service" "api" {
   enable_ecs_managed_tags       = true
 
   network_configuration {
-    subnets          = [data.aws_subnet.public_az1.id, data.aws_subnet.public_az2.id]
-    security_groups  = [data.aws_security_group.ecs_tasks.id]
+    subnets = [
+      aws_subnet.public_az1.id,
+      aws_subnet.public_az2.id
+    ]
+
+    security_groups = [
+      aws_security_group.ecs_api.id
+    ]
+
     assign_public_ip = true
   }
 
